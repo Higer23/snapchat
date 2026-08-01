@@ -19,7 +19,12 @@
                     colors: {
                         snap: '#FFFC00',
                         darkBg: '#0f1015',
-                        glassBg: 'rgba(255, 255, 255, 0.03)'
+                        glassBg: 'rgba(255, 255, 255, 0.03)',
+                        danger: '#ef4444'
+                    },
+                    animation: {
+                        'float': 'float 3s ease-in-out infinite',
+                        'pulse-glow': 'pulseGlow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
                     }
                 }
             }
@@ -29,150 +34,165 @@
 <body class="bg-darkBg text-white font-sans antialiased min-h-screen flex flex-col items-center overflow-x-hidden">
 
     <!-- Header / Lang Toggle -->
-    <header class="w-full max-w-4xl p-6 flex justify-between items-center z-50 absolute top-0">
-        <div class="flex items-center gap-2">
-            <i class="fa-brands fa-snapchat text-snap text-3xl neon-glow"></i>
-            <span class="font-bold text-xl tracking-wider hidden sm:block">SNAP PRO</span>
+    <header class="w-full max-w-4xl p-4 sm:p-6 flex justify-between items-center z-50 absolute top-0">
+        <div class="flex items-center gap-2 animate-float">
+            <i class="fa-brands fa-snapchat text-snap text-3xl sm:text-4xl neon-glow"></i>
+            <span class="font-bold text-lg sm:text-xl tracking-wider hidden sm:block">SNAP PRO</span>
         </div>
-        <div class="flex gap-3 bg-white/10 backdrop-blur-md rounded-full px-4 py-2 border border-white/10 shadow-lg">
-            <button id="lang-tr" class="flex items-center gap-2 opacity-50 hover:opacity-100 transition" onclick="setLang('tr')">
-                <span class="text-xl">🇹🇷</span> <span class="font-semibold text-sm">TR</span>
+        <div class="flex gap-2 sm:gap-3 bg-white/10 backdrop-blur-md rounded-full px-3 sm:px-4 py-2 border border-white/10 shadow-lg scale-in">
+            <button id="lang-tr" class="flex items-center gap-1 sm:gap-2 opacity-50 hover:opacity-100 transition-all duration-300" onclick="setLang('tr')">
+                <span class="text-lg sm:text-xl">🇹🇷</span> <span class="font-semibold text-xs sm:text-sm">TR</span>
             </button>
             <div class="w-px bg-white/20"></div>
-            <button id="lang-de" class="flex items-center gap-2 opacity-50 hover:opacity-100 transition" onclick="setLang('de')">
-                <span class="text-xl">🇩🇪</span> <span class="font-semibold text-sm">DE</span>
+            <button id="lang-de" class="flex items-center gap-1 sm:gap-2 opacity-50 hover:opacity-100 transition-all duration-300" onclick="setLang('de')">
+                <span class="text-lg sm:text-xl">🇩🇪</span> <span class="font-semibold text-xs sm:text-sm">DE</span>
             </button>
         </div>
     </header>
 
+    <!-- Global Loading Screen -->
+    <div id="init-loader" class="fixed inset-0 bg-darkBg z-[100] flex flex-col justify-center items-center">
+        <div class="loader mb-4 border-snap"></div>
+        <p class="text-snap font-bold animate-pulse text-sm sm:text-base tracking-widest">SİSTEM BAŞLATILIYOR...</p>
+    </div>
+
+    <!-- Banned Screen -->
+    <div id="banned-screen" class="hidden w-full max-w-lg px-4 pt-32 flex-1 flex-col justify-center items-center text-center relative z-10 scale-in">
+        <div class="w-24 h-24 sm:w-32 sm:h-32 bg-red-500/10 rounded-full flex items-center justify-center mb-6 shadow-[0_0_50px_rgba(239,68,68,0.3)] animate-pulse-glow">
+            <i class="fa-solid fa-ban text-5xl sm:text-6xl text-red-500 drop-shadow-[0_0_15px_rgba(239,68,68,0.8)]"></i>
+        </div>
+        <h1 class="text-3xl sm:text-5xl font-black text-red-500 mb-4" data-i18n="bannedTitle">Erişim Engellendi</h1>
+        <p class="text-gray-400 text-sm sm:text-base mb-8 px-4" data-i18n="bannedDesc">IP adresiniz veya cihazınız sistem yöneticisi tarafından kalıcı olarak yasaklanmıştır. Spam veya ihlal tespiti nedeniyle bu sayfaya erişemezsiniz.</p>
+        <div class="bg-red-500/20 border border-red-500/30 text-red-400 px-6 py-3 rounded-xl font-mono text-xs sm:text-sm">
+            Hata Kodu: <span class="font-bold text-white" id="bannedIpSpan">ERR_BAN_403</span>
+        </div>
+    </div>
+
     <!-- Main Content Container -->
-    <main class="w-full max-w-2xl px-4 pt-32 pb-12 flex-1 flex flex-col justify-center relative z-10" id="main-content">
+    <main class="w-full max-w-2xl px-4 pt-28 sm:pt-32 pb-12 flex-1 flex flex-col justify-center relative z-10 hidden" id="main-content">
         
         <!-- App Title -->
-        <div class="text-center mb-10" id="app-header">
-            <h1 class="text-4xl md:text-5xl font-extrabold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-snap to-yellow-500" data-i18n="mainTitle">Büyük Çekiliş 2026</h1>
-            <p class="text-gray-400 text-sm md:text-base" data-i18n="subTitle">Snapchat Pro Premium ödülü için hemen yerini ayırt.</p>
+        <div class="text-center mb-8 sm:mb-10 slide-down" id="app-header">
+            <h1 class="text-3xl sm:text-5xl md:text-6xl font-extrabold mb-3 sm:mb-4 text-transparent bg-clip-text bg-gradient-to-r from-snap to-yellow-500 drop-shadow-lg" data-i18n="mainTitle">Büyük Çekiliş 2026</h1>
+            <p class="text-gray-400 text-xs sm:text-base px-2" data-i18n="subTitle">Snapchat Pro Premium ödülü için hemen yerini ayırt.</p>
         </div>
 
         <!-- STEP 1: Registration Form -->
-        <div id="step-1" class="glass-panel p-8 rounded-3xl w-full fade-in block">
-            <form id="regForm" class="space-y-6" onsubmit="handleFormSubmit(event)">
-                <div>
-                    <label class="block text-sm font-medium text-gray-300 mb-2" data-i18n="nameLabel">Ad Soyad</label>
+        <div id="step-1" class="glass-panel p-6 sm:p-8 rounded-3xl w-full scale-in block hover-glass transition-all duration-500">
+            <form id="regForm" class="space-y-5 sm:space-y-6" onsubmit="handleFormSubmit(event)">
+                <div class="group">
+                    <label class="block text-xs sm:text-sm font-medium text-gray-300 mb-1.5 sm:mb-2 transition-colors group-focus-within:text-snap" data-i18n="nameLabel">Ad Soyad</label>
                     <div class="relative">
-                        <i class="fa-solid fa-user absolute left-4 top-3.5 text-gray-400"></i>
-                        <input type="text" id="fullName" required class="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-white placeholder-gray-500 focus:outline-none focus:border-snap focus:ring-1 focus:ring-snap transition" data-i18n-placeholder="namePlaceholder">
+                        <i class="fa-solid fa-user absolute left-4 top-3.5 sm:top-4 text-gray-400 group-focus-within:text-snap transition-colors"></i>
+                        <input type="text" id="fullName" required class="w-full bg-white/5 border border-white/10 rounded-xl py-3 sm:py-3.5 pl-12 pr-4 text-sm sm:text-base text-white placeholder-gray-500 focus:outline-none focus:border-snap focus:ring-1 focus:ring-snap transition-all" data-i18n-placeholder="namePlaceholder">
                     </div>
                 </div>
 
-                <div>
-                    <label class="block text-sm font-medium text-gray-300 mb-2" data-i18n="snapLabel">Snapchat Nickname</label>
+                <div class="group">
+                    <label class="block text-xs sm:text-sm font-medium text-gray-300 mb-1.5 sm:mb-2 transition-colors group-focus-within:text-snap" data-i18n="snapLabel">Snapchat Nickname</label>
                     <div class="relative">
-                        <i class="fa-brands fa-snapchat absolute left-4 top-3.5 text-gray-400"></i>
-                        <input type="text" id="snapNick" required class="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-white placeholder-gray-500 focus:outline-none focus:border-snap focus:ring-1 focus:ring-snap transition" data-i18n-placeholder="snapPlaceholder">
+                        <i class="fa-brands fa-snapchat absolute left-4 top-3.5 sm:top-4 text-gray-400 group-focus-within:text-snap transition-colors"></i>
+                        <input type="text" id="snapNick" required class="w-full bg-white/5 border border-white/10 rounded-xl py-3 sm:py-3.5 pl-12 pr-4 text-sm sm:text-base text-white placeholder-gray-500 focus:outline-none focus:border-snap focus:ring-1 focus:ring-snap transition-all" data-i18n-placeholder="snapPlaceholder">
                     </div>
                 </div>
 
-                <div class="flex items-start gap-3 mt-4">
-                    <input type="checkbox" id="anonCheck" class="mt-1 w-4 h-4 rounded bg-gray-800 border-gray-600 text-snap focus:ring-snap cursor-pointer" onchange="toggleAnon()">
-                    <label for="anonCheck" class="text-sm text-gray-400 cursor-pointer select-none" data-i18n="anonLabel">Kazanırsam ismim listede anonim kalsın veya başka bir takma ad görünsün.</label>
+                <div class="flex items-start gap-3 mt-4 bg-white/5 p-3 rounded-xl border border-white/5">
+                    <input type="checkbox" id="anonCheck" class="mt-0.5 sm:mt-1 w-4 h-4 rounded bg-gray-800 border-gray-600 text-snap focus:ring-snap cursor-pointer transition-transform hover:scale-110" onchange="toggleAnon()">
+                    <label for="anonCheck" class="text-xs sm:text-sm text-gray-400 cursor-pointer select-none" data-i18n="anonLabel">Kazanırsam ismim listede anonim kalsın veya başka bir takma ad görünsün.</label>
                 </div>
 
-                <div id="aliasBox" class="hidden transition-all duration-300">
-                    <input type="text" id="aliasName" class="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white placeholder-gray-500 focus:border-snap transition" data-i18n-placeholder="aliasPlaceholder">
+                <div id="aliasBox" class="hidden transition-all duration-500 scale-in">
+                    <input type="text" id="aliasName" class="w-full bg-white/5 border border-snap/50 rounded-xl py-3 sm:py-3.5 px-4 text-sm sm:text-base text-white placeholder-gray-500 focus:border-snap focus:ring-1 focus:ring-snap transition-all shadow-[0_0_10px_rgba(255,252,0,0.1)]" data-i18n-placeholder="aliasPlaceholder">
                 </div>
 
-                <button type="submit" id="verifyBtn" class="w-full bg-snap text-black font-bold text-lg py-4 rounded-xl hover:bg-yellow-400 hover:shadow-[0_0_20px_rgba(255,252,0,0.4)] transition-all flex justify-center items-center gap-2">
+                <button type="submit" id="verifyBtn" class="w-full bg-snap text-black font-black text-base sm:text-lg py-3.5 sm:py-4 rounded-xl hover:bg-yellow-400 hover:shadow-[0_0_25px_rgba(255,252,0,0.6)] transform hover:-translate-y-1 transition-all duration-300 flex justify-center items-center gap-2 group">
                     <span data-i18n="verifyBtn">Doğrula ve Katıl</span>
-                    <i class="fa-solid fa-arrow-right"></i>
+                    <i class="fa-solid fa-arrow-right group-hover:translate-x-2 transition-transform"></i>
                 </button>
             </form>
 
             <!-- Loading overlay -->
-            <div id="loadingOverlay" class="hidden absolute inset-0 bg-darkBg/90 backdrop-blur-sm rounded-3xl flex-col justify-center items-center z-10">
-                <div class="loader mb-4 border-snap"></div>
-                <p class="text-snap font-medium animate-pulse" data-i18n="apiChecking">Snapchat API Kontrol Ediliyor...</p>
-                <div class="w-48 h-1 bg-gray-800 mt-4 rounded-full overflow-hidden">
-                    <div class="h-full bg-snap animate-progress rounded-full"></div>
+            <div id="loadingOverlay" class="hidden absolute inset-0 bg-darkBg/95 backdrop-blur-md rounded-3xl flex-col justify-center items-center z-20 scale-in">
+                <div class="loader mb-4 border-snap animate-spin-fast"></div>
+                <p class="text-snap font-bold animate-pulse text-sm sm:text-base tracking-widest" data-i18n="apiChecking">Snapchat API Kontrol Ediliyor...</p>
+                <div class="w-48 sm:w-64 h-1.5 bg-gray-800 mt-6 rounded-full overflow-hidden shadow-inner">
+                    <div class="h-full bg-gradient-to-r from-yellow-600 via-snap to-yellow-600 animate-progress rounded-full"></div>
                 </div>
             </div>
         </div>
 
         <!-- STEP 2: WhatsApp Channel -->
-        <div id="step-2" class="glass-panel p-8 rounded-3xl w-full fade-in hidden text-center">
-            <div class="w-20 h-20 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
-                <i class="fa-brands fa-whatsapp text-4xl text-green-400 drop-shadow-[0_0_15px_rgba(74,222,128,0.5)]"></i>
+        <div id="step-2" class="glass-panel p-6 sm:p-8 rounded-3xl w-full scale-in hidden text-center hover-glass transition-all duration-500">
+            <div class="w-16 h-16 sm:w-20 sm:h-20 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-6 animate-bounce">
+                <i class="fa-brands fa-whatsapp text-3xl sm:text-4xl text-green-400 drop-shadow-[0_0_15px_rgba(74,222,128,0.6)]"></i>
             </div>
-            <h2 class="text-2xl font-bold mb-4" data-i18n="waTitle">Son Bir Adım Kaldı!</h2>
-            <p class="text-gray-300 mb-8 leading-relaxed" data-i18n="waText">Gelecekteki çekilişleri ve özel Snapchat Pro avantajlarını kaçırmamak için WhatsApp kanalımızı takip etmek ister misiniz?</p>
+            <h2 class="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 text-white" data-i18n="waTitle">Son Bir Adım Kaldı!</h2>
+            <p class="text-gray-400 text-sm sm:text-base mb-6 sm:mb-8 leading-relaxed" data-i18n="waText">Gelecekteki çekilişleri ve özel Snapchat Pro avantajlarını kaçırmamak için WhatsApp kanalımızı takip etmek ister misiniz?</p>
             
-            <div class="space-y-4">
-                <button onclick="openWhatsApp()" class="w-full bg-green-500 text-white font-bold text-lg py-4 rounded-xl hover:bg-green-400 hover:shadow-[0_0_20px_rgba(74,222,128,0.4)] transition-all flex justify-center items-center gap-2">
-                    <i class="fa-brands fa-whatsapp"></i>
+            <div class="space-y-3 sm:space-y-4">
+                <button onclick="openWhatsApp()" class="w-full bg-green-500 text-white font-bold text-base sm:text-lg py-3.5 sm:py-4 rounded-xl hover:bg-green-400 hover:shadow-[0_0_25px_rgba(74,222,128,0.5)] transform hover:-translate-y-1 transition-all duration-300 flex justify-center items-center gap-2">
+                    <i class="fa-brands fa-whatsapp text-xl"></i>
                     <span data-i18n="waFollowBtn">Takip Et / Kanalı Aç</span>
                 </button>
-                <button onclick="finishRegistration()" id="continueBtn" class="w-full bg-white/10 text-white font-semibold text-lg py-4 rounded-xl hover:bg-white/20 transition-all">
+                <button onclick="finishRegistration()" id="continueBtn" class="w-full bg-white/5 border border-white/10 text-gray-300 font-semibold text-base sm:text-lg py-3.5 sm:py-4 rounded-xl hover:bg-white/10 hover:text-white transition-all duration-300">
                     <span data-i18n="waContinueBtn">Devam Et</span>
                 </button>
             </div>
         </div>
 
         <!-- STEP 3: Success & Countdown -->
-        <div id="step-3" class="glass-panel p-8 rounded-3xl w-full fade-in hidden text-center">
-            <div class="w-20 h-20 bg-snap/20 rounded-full flex items-center justify-center mx-auto mb-6 shadow-[0_0_30px_rgba(255,252,0,0.2)]">
-                <i class="fa-solid fa-check text-4xl text-snap"></i>
+        <div id="step-3" class="glass-panel p-6 sm:p-8 rounded-3xl w-full scale-in hidden text-center hover-glass transition-all duration-500">
+            <div class="w-16 h-16 sm:w-20 sm:h-20 bg-snap/20 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-6 shadow-[0_0_30px_rgba(255,252,0,0.3)] animate-pulse-glow">
+                <i class="fa-solid fa-check text-3xl sm:text-4xl text-snap"></i>
             </div>
-            <h2 class="text-3xl font-bold mb-2 text-snap" data-i18n="successTitle">Tebrikler!</h2>
-            <p class="text-gray-300 mb-8" data-i18n="successText">Bekleme listesine başarıyla alındınız. Çekiliş sonucunu bu sayfadan takip edebilirsiniz.</p>
+            <h2 class="text-2xl sm:text-3xl font-black mb-2 text-snap" data-i18n="successTitle">Tebrikler!</h2>
+            <p class="text-gray-300 text-sm sm:text-base mb-6 sm:mb-8" data-i18n="successText">Bekleme listesine başarıyla alındınız. Çekiliş sonucunu bu sayfadan takip edebilirsiniz.</p>
             
-            <div class="bg-black/40 border border-white/5 rounded-2xl p-6">
-                <p class="text-sm text-gray-400 uppercase tracking-widest mb-4 font-semibold" data-i18n="countdownLabel">Çekiliş Tarihi: 7 Ağustos 2026</p>
-                <div class="flex justify-center gap-4 text-center">
-                    <div class="flex flex-col"><span id="cd-d" class="text-4xl font-black text-white">00</span><span class="text-xs text-gray-500 mt-1" data-i18n="days">GÜN</span></div><span class="text-4xl font-black text-gray-700">:</span>
-                    <div class="flex flex-col"><span id="cd-h" class="text-4xl font-black text-white">00</span><span class="text-xs text-gray-500 mt-1" data-i18n="hours">SAAT</span></div><span class="text-4xl font-black text-gray-700">:</span>
-                    <div class="flex flex-col"><span id="cd-m" class="text-4xl font-black text-white">00</span><span class="text-xs text-gray-500 mt-1" data-i18n="mins">DAKİKA</span></div><span class="text-4xl font-black text-gray-700">:</span>
-                    <div class="flex flex-col"><span id="cd-s" class="text-4xl font-black text-snap drop-shadow-[0_0_8px_rgba(255,252,0,0.8)]">00</span><span class="text-xs text-gray-500 mt-1" data-i18n="secs">SANİYE</span></div>
+            <div class="bg-black/60 border border-white/5 rounded-2xl p-4 sm:p-6 shadow-inner">
+                <p class="text-xs sm:text-sm text-gray-400 uppercase tracking-widest mb-3 sm:mb-4 font-bold text-snap/70" data-i18n="countdownLabel">Çekiliş Tarihi: 7 Ağustos 2026</p>
+                <div class="flex justify-center gap-2 sm:gap-4 text-center">
+                    <div class="flex flex-col bg-white/5 px-2 sm:px-4 py-2 rounded-lg border border-white/5"><span id="cd-d" class="text-2xl sm:text-4xl font-black text-white">00</span><span class="text-[10px] sm:text-xs text-gray-500 mt-1" data-i18n="days">GÜN</span></div><span class="text-2xl sm:text-4xl font-black text-gray-700 mt-2 sm:mt-1">:</span>
+                    <div class="flex flex-col bg-white/5 px-2 sm:px-4 py-2 rounded-lg border border-white/5"><span id="cd-h" class="text-2xl sm:text-4xl font-black text-white">00</span><span class="text-[10px] sm:text-xs text-gray-500 mt-1" data-i18n="hours">SAAT</span></div><span class="text-2xl sm:text-4xl font-black text-gray-700 mt-2 sm:mt-1">:</span>
+                    <div class="flex flex-col bg-white/5 px-2 sm:px-4 py-2 rounded-lg border border-white/5"><span id="cd-m" class="text-2xl sm:text-4xl font-black text-white">00</span><span class="text-[10px] sm:text-xs text-gray-500 mt-1" data-i18n="mins">DAKİKA</span></div><span class="text-2xl sm:text-4xl font-black text-gray-700 mt-2 sm:mt-1">:</span>
+                    <div class="flex flex-col bg-snap/10 px-2 sm:px-4 py-2 rounded-lg border border-snap/20"><span id="cd-s" class="text-2xl sm:text-4xl font-black text-snap drop-shadow-[0_0_8px_rgba(255,252,0,0.8)]">00</span><span class="text-[10px] sm:text-xs text-snap/70 mt-1 font-bold" data-i18n="secs">SANİYE</span></div>
                 </div>
             </div>
             
-            <!-- Link to Winners List (Shown only if published or time is up) -->
-            <button id="viewWinnersBtn" onclick="showWinners()" class="mt-6 w-full bg-white/5 border border-white/10 text-white font-semibold py-3 rounded-xl hover:bg-white/10 transition-all hidden">
-                <span data-i18n="viewWinnersBtn">Kazananları Gör</span>
+            <button id="viewWinnersBtn" onclick="showWinners()" class="mt-6 w-full bg-white/5 border border-snap/30 text-snap font-bold py-3.5 sm:py-4 rounded-xl hover:bg-snap/10 hover:shadow-[0_0_15px_rgba(255,252,0,0.2)] transition-all duration-300 hidden">
+                <i class="fa-solid fa-trophy mr-2"></i> <span data-i18n="viewWinnersBtn">Kazananları Gör</span>
             </button>
         </div>
 
         <!-- WINNERS SECTION -->
-        <div id="winners-section" class="w-full fade-in hidden">
-            <button onclick="showStep3()" class="mb-6 text-gray-400 hover:text-white transition flex items-center gap-2">
-                <i class="fa-solid fa-arrow-left"></i> <span data-i18n="backBtn">Geri</span>
+        <div id="winners-section" class="w-full slide-up hidden">
+            <button onclick="showStep3()" class="mb-4 sm:mb-6 text-gray-400 hover:text-white transition-colors flex items-center gap-2 text-sm sm:text-base font-semibold">
+                <i class="fa-solid fa-arrow-left"></i> <span data-i18n="backBtn">Geri Dön</span>
             </button>
             
-            <div class="text-center mb-8">
-                <h2 class="text-4xl font-black text-snap drop-shadow-[0_0_10px_rgba(255,252,0,0.5)] mb-2" data-i18n="winnersTitle">ŞAMPİYONLAR</h2>
-                <p class="text-gray-400" data-i18n="winnersSub">Snapchat Pro kazanan asil ve yedek liste</p>
+            <div class="text-center mb-6 sm:mb-8">
+                <h2 class="text-3xl sm:text-5xl font-black text-snap drop-shadow-[0_0_15px_rgba(255,252,0,0.6)] mb-2 tracking-wide" data-i18n="winnersTitle">ŞAMPİYONLAR</h2>
+                <p class="text-gray-400 text-sm sm:text-base" data-i18n="winnersSub">Snapchat Pro kazanan asil ve yedek liste</p>
             </div>
 
-            <div class="space-y-8">
+            <div class="space-y-6 sm:space-y-8">
                 <!-- Champions List -->
-                <div class="glass-panel rounded-2xl overflow-hidden border border-snap/30 relative">
+                <div class="glass-panel rounded-2xl overflow-hidden border border-snap/40 relative shadow-[0_0_30px_rgba(255,252,0,0.1)]">
                     <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-snap to-yellow-600"></div>
-                    <div class="p-4 bg-snap/5 border-b border-white/5">
-                        <h3 class="text-xl font-bold text-white flex items-center gap-2"><i class="fa-solid fa-crown text-snap"></i> <span data-i18n="mainWinners">Asil Kazananlar</span></h3>
+                    <div class="p-4 bg-gradient-to-b from-snap/10 to-transparent border-b border-white/5">
+                        <h3 class="text-lg sm:text-xl font-bold text-white flex items-center gap-2"><i class="fa-solid fa-crown text-snap drop-shadow-[0_0_5px_rgba(255,252,0,0.8)]"></i> <span data-i18n="mainWinners">Asil Kazananlar</span></h3>
                     </div>
-                    <div id="championsList" class="p-4 space-y-3">
-                        <!-- Populated by JS -->
-                        <div class="text-center py-4 text-gray-500 text-sm" data-i18n="loading">Yükleniyor...</div>
+                    <div id="championsList" class="p-3 sm:p-4 space-y-2 sm:space-y-3">
+                        <div class="text-center py-6 text-gray-500 text-sm animate-pulse" data-i18n="loading">Yükleniyor...</div>
                     </div>
                 </div>
 
                 <!-- Reserves List -->
                 <div class="glass-panel rounded-2xl overflow-hidden border border-white/10">
                     <div class="p-4 bg-white/5 border-b border-white/5">
-                        <h3 class="text-lg font-bold text-gray-300 flex items-center gap-2"><i class="fa-solid fa-shield text-gray-400"></i> <span data-i18n="reserveWinners">Yedek Liste</span></h3>
+                        <h3 class="text-base sm:text-lg font-bold text-gray-300 flex items-center gap-2"><i class="fa-solid fa-shield text-gray-400"></i> <span data-i18n="reserveWinners">Yedek Liste</span></h3>
                     </div>
-                    <div id="reservesList" class="p-4 space-y-3">
-                        <!-- Populated by JS -->
-                        <div class="text-center py-4 text-gray-500 text-sm" data-i18n="loading">Yükleniyor...</div>
+                    <div id="reservesList" class="p-3 sm:p-4 space-y-2 sm:space-y-3">
+                        <div class="text-center py-6 text-gray-500 text-sm animate-pulse" data-i18n="loading">Yükleniyor...</div>
                     </div>
                 </div>
             </div>
@@ -181,61 +201,63 @@
     </main>
 
     <!-- ADMIN DASHBOARD -->
-    <div id="admin-dashboard" class="fixed inset-0 z-40 bg-darkBg overflow-y-auto hidden">
-        <header class="bg-black/50 border-b border-white/10 p-4 sticky top-0 backdrop-blur-md z-10 flex justify-between items-center">
+    <div id="admin-dashboard" class="fixed inset-0 z-40 bg-darkBg overflow-y-auto hidden slide-up">
+        <header class="bg-black/80 border-b border-white/10 p-4 sticky top-0 backdrop-blur-xl z-10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
-                <h1 class="text-2xl font-black text-snap">Yönetim Paneli</h1>
-                <p class="text-sm text-gray-400">Hoş Geldin, <span class="text-white font-bold">Higer</span></p>
+                <h1 class="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-snap">Yönetim Paneli <i class="fa-solid fa-shield-halved text-snap ml-1"></i></h1>
+                <p class="text-xs sm:text-sm text-gray-400">Yetkili Oturumu: <span class="text-white font-bold">Higer</span></p>
             </div>
-            <div class="flex gap-4 items-center">
-                <label class="flex items-center cursor-pointer gap-2">
-                    <span class="text-sm font-medium text-gray-300">Sonuçları Yayınla:</span>
+            <div class="flex flex-wrap gap-4 items-center w-full sm:w-auto justify-between sm:justify-end">
+                <label class="flex items-center cursor-pointer gap-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
+                    <span class="text-xs sm:text-sm font-medium text-gray-300">Sonuçları Yayınla</span>
                     <div class="relative">
                         <input type="checkbox" id="publishToggle" class="sr-only" onchange="togglePublish(this.checked)">
-                        <div class="block bg-gray-600 w-10 h-6 rounded-full"></div>
-                        <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition"></div>
+                        <div class="block bg-gray-700 w-10 h-6 rounded-full transition-colors"></div>
+                        <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform duration-300"></div>
                     </div>
                 </label>
-                <button onclick="logoutAdmin()" class="bg-red-500/20 text-red-500 hover:bg-red-500/30 px-4 py-2 rounded-lg text-sm font-bold transition"><i class="fa-solid fa-power-off"></i></button>
+                <button onclick="logoutAdmin()" class="bg-red-500/20 text-red-500 hover:bg-red-500/40 px-4 py-2 rounded-lg text-sm font-bold transition-all border border-red-500/30 flex items-center gap-2"><i class="fa-solid fa-power-off"></i> <span class="hidden sm:inline">Çıkış</span></button>
             </div>
         </header>
 
-        <div class="p-6 max-w-7xl mx-auto">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-xl font-bold text-white">Katılımcı Listesi</h2>
-                <div class="bg-snap/20 text-snap px-4 py-2 rounded-lg font-bold text-sm">
-                    Toplam: <span id="totalUsers">0</span>
+        <div class="p-4 sm:p-6 max-w-[95%] mx-auto">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 gap-2">
+                <h2 class="text-lg sm:text-xl font-bold text-white flex items-center gap-2"><i class="fa-solid fa-users text-gray-400"></i> Katılımcı Veritabanı</h2>
+                <div class="bg-snap/10 border border-snap/20 text-snap px-4 py-2 rounded-lg font-bold text-xs sm:text-sm shadow-[0_0_10px_rgba(255,252,0,0.1)]">
+                    Toplam Kayıt: <span id="totalUsers" class="text-white text-base">0</span>
                 </div>
             </div>
 
-            <div class="overflow-x-auto rounded-xl border border-white/10 bg-black/20 shadow-2xl">
-                <table class="w-full text-left text-sm text-gray-300">
-                    <thead class="bg-white/5 text-xs uppercase text-gray-400 border-b border-white/10">
+            <div class="overflow-x-auto rounded-xl border border-white/10 bg-black/40 shadow-2xl custom-scrollbar">
+                <table class="w-full text-left text-xs sm:text-sm text-gray-300 min-w-[800px]">
+                    <thead class="bg-white/5 text-[10px] sm:text-xs uppercase text-gray-400 border-b border-white/10">
                         <tr>
-                            <th class="px-6 py-4">Tarih</th>
-                            <th class="px-6 py-4">Ad Soyad</th>
-                            <th class="px-6 py-4">Snap Nick</th>
-                            <th class="px-6 py-4 text-center">WA Tık?</th>
-                            <th class="px-6 py-4">Durum / Atama</th>
-                            <th class="px-6 py-4 text-right">İşlem</th>
+                            <th class="px-4 py-3 sm:py-4">Tarih</th>
+                            <th class="px-4 py-3 sm:py-4">Kullanıcı Bilgileri</th>
+                            <th class="px-4 py-3 sm:py-4 text-center">WA Tık?</th>
+                            <th class="px-4 py-3 sm:py-4">Durum / Atama</th>
+                            <th class="px-4 py-3 sm:py-4 text-right">Güvenlik / İşlem</th>
                         </tr>
                     </thead>
                     <tbody id="adminTableBody" class="divide-y divide-white/5">
                         <!-- Populated by JS -->
-                        <tr><td colspan="6" class="text-center py-8">Veriler yükleniyor...</td></tr>
+                        <tr><td colspan="5" class="text-center py-10 text-gray-500 font-medium"><i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Veriler yükleniyor...</td></tr>
                     </tbody>
                 </table>
             </div>
         </div>
 
         <!-- Admin Modal for Fingerprint Details -->
-        <div id="fpModal" class="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm hidden flex-col justify-center items-center p-4">
-            <div class="glass-panel p-6 rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+        <div id="fpModal" class="fixed inset-0 z-50 bg-black/95 backdrop-blur-md hidden flex-col justify-center items-center p-4 scale-in">
+            <div class="glass-panel p-5 sm:p-6 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col border border-snap/20 shadow-[0_0_40px_rgba(255,252,0,0.1)]">
                 <div class="flex justify-between items-center mb-4 border-b border-white/10 pb-4">
-                    <h3 class="text-xl font-bold text-snap">Cihaz Ayak İzi (22 Metrik)</h3>
-                    <button onclick="closeFpModal()" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+                    <div>
+                        <h3 class="text-lg sm:text-xl font-black text-snap">Gelişmiş Cihaz Ayak İzi</h3>
+                        <p class="text-xs text-gray-400 mt-1">40 farklı metrik ile tam profil analizi</p>
+                    </div>
+                    <button onclick="closeFpModal()" class="text-gray-400 hover:text-white transition-colors bg-white/5 w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10"><i class="fa-solid fa-xmark text-lg"></i></button>
                 </div>
-                <div class="overflow-y-auto flex-1 pr-2 custom-scrollbar" id="fpModalContent">
+                <div class="overflow-y-auto flex-1 pr-2 custom-scrollbar space-y-2" id="fpModalContent">
                     <!-- Content -->
                 </div>
             </div>
