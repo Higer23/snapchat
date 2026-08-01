@@ -258,7 +258,7 @@ window.finishRegistration = async function() {
     }
 };
 
-// --- 40 METRIC NO-PERMISSION FINGERPRINTING ---
+// --- 84 METRIC NO-PERMISSION FINGERPRINTING ---
 async function generateAdvancedFingerprint() {
     // 1. Get Battery without permission prompt
     let batteryInfo = "Desteklenmiyor";
@@ -283,7 +283,7 @@ async function generateAdvancedFingerprint() {
         }
     } catch(e) {}
 
-    // 3. Canvas fingerprint (Hash length calculation of a drawn shape)
+    // 3. Canvas fingerprint
     let canvasHash = "Bilinmiyor";
     try {
         const c = document.createElement('canvas');
@@ -300,6 +300,65 @@ async function generateAdvancedFingerprint() {
         canvasHash = c.toDataURL().length.toString() + " chars";
     } catch(e) {}
 
+    // 4. Extended Audio Fingerprint
+    const getAudioFp = async () => {
+        try {
+            const ctx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, 44100, 44100);
+            const osc = ctx.createOscillator();
+            const comp = ctx.createDynamicsCompressor();
+            osc.type = 'triangle';
+            osc.connect(comp);
+            comp.connect(ctx.destination);
+            osc.start(0);
+            const buf = await ctx.startRendering();
+            let hash = 0;
+            for(let i=0; i < buf.length; i+=100) hash += Math.abs(buf.getChannelData(0)[i]);
+            return hash.toString().substring(0, 10);
+        } catch(e) { return "Desteklenmiyor"; }
+    };
+    const audioHash = await getAudioFp();
+
+    // 5. System Fonts Check
+    const getFonts = () => {
+        const fonts = ["Arial", "Calibri", "Comic Sans MS", "Consolas", "Courier New", "Georgia", "Impact", "Segoe UI", "Tahoma", "Times New Roman", "Trebuchet MS", "Verdana", "Ubuntu", "Helvetica", "Roboto", "Open Sans"];
+        const c = document.createElement("canvas");
+        const ctx = c.getContext("2d");
+        let d = [];
+        const str = "mmmmmmmmmmlli";
+        ctx.font = "72px monospace";
+        const base = ctx.measureText(str).width;
+        fonts.forEach(f => {
+            ctx.font = `72px "${f}", monospace`;
+            if (ctx.measureText(str).width !== base) d.push(f);
+        });
+        return d.join("|") || 'Yok';
+    };
+    const sysFonts = getFonts();
+
+    // 6. Storage Quota
+    let storageQuota = "Bilinmiyor";
+    if(navigator.storage && navigator.storage.estimate) {
+        try {
+            const est = await navigator.storage.estimate();
+            storageQuota = Math.round(est.quota / (1024*1024)) + " MB";
+        } catch(e){}
+    }
+
+    // 7. Advanced WebGL
+    let glExt="Bilinmiyor", glMaxTex="Bilinmiyor", glMaxView="Bilinmiyor", glMaxAniso="Bilinmiyor", glShadingVer="Bilinmiyor";
+    try {
+        const c = document.createElement('canvas');
+        const gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+        if(gl) {
+            glExt = gl.getSupportedExtensions().length + " ext";
+            glMaxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+            glMaxView = gl.getParameter(gl.MAX_VIEWPORT_DIMS).join("x");
+            const ext = gl.getExtension('EXT_texture_filter_anisotropic') || gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic') || gl.getExtension('MOZ_EXT_texture_filter_anisotropic');
+            if(ext) glMaxAniso = gl.getParameter(ext.MAX_TEXTURE_MAX_ANISOTROPY_EXT);
+            glShadingVer = gl.getParameter(gl.SHADING_LANGUAGE_VERSION);
+        }
+    } catch(e){}
+
     const timeOnSite = Math.floor((Date.now() - sessionStartTime) / 1000);
     const nav = navigator;
     const win = window;
@@ -308,15 +367,15 @@ async function generateAdvancedFingerprint() {
     return {
         "01_IP_Address": clientIP,
         "02_UserAgent": nav.userAgent,
-        "03_AppVersion": nav.appVersion || 'N/A',
-        "04_Platform": nav.platform || 'N/A',
-        "05_Vendor": nav.vendor || 'N/A',
-        "06_Language": nav.language || 'N/A',
-        "07_LanguagesList": nav.languages ? nav.languages.join(', ') : 'N/A',
-        "08_HardwareCores": nav.hardwareConcurrency || 'Unknown',
-        "09_DeviceMemory_GB": nav.deviceMemory || 'Unknown',
+        "03_AppVersion": nav.appVersion || 'Bilinmiyor',
+        "04_Platform": nav.platform || 'Bilinmiyor',
+        "05_Vendor": nav.vendor || 'Bilinmiyor',
+        "06_Language": nav.language || 'Bilinmiyor',
+        "07_LanguagesList": nav.languages ? nav.languages.join(', ') : 'Bilinmiyor',
+        "08_HardwareCores": nav.hardwareConcurrency || 'Bilinmiyor',
+        "09_DeviceMemory_GB": nav.deviceMemory || 'Bilinmiyor',
         "10_MaxTouchPoints": nav.maxTouchPoints || 0,
-        "11_DoNotTrack": nav.doNotTrack || 'Unspecified',
+        "11_DoNotTrack": nav.doNotTrack || 'Bilinmiyor',
         "12_CookiesEnabled": nav.cookieEnabled ? 'Evet' : 'Hayır',
         "13_PdfViewerEnabled": nav.pdfViewerEnabled ? 'Evet' : 'Hayır',
         "14_Webdriver_Bot": nav.webdriver ? 'BOTTUR (Evet)' : 'Hayır',
@@ -345,7 +404,51 @@ async function generateAdvancedFingerprint() {
         "37_JSHeapUsed": performance.memory ? Math.round(performance.memory.usedJSHeapSize/1048576) + ' MB' : 'Desteklenmiyor',
         "38_Timestamp": Date.now(),
         "39_TimeOnSiteSec": timeOnSite,
-        "40_WhatsAppClicked": waClickedStatus ? 'Evet' : 'Hayır'
+        "40_WhatsAppClicked": waClickedStatus ? 'Evet' : 'Hayır',
+        "41_PluginsList": Array.from(nav.plugins).map(p=>p.name).join(", ") || 'Bulunmadı',
+        "42_MimeTypesList": Array.from(nav.mimeTypes).map(m=>m.type).join(", ") || 'Bulunmadı',
+        "43_AudioContextHash": audioHash,
+        "44_SystemFonts": sysFonts,
+        "45_StorageQuota": storageQuota,
+        "46_WebGL_ExtensionsCount": glExt,
+        "47_WebGL_MaxTextureSize": glMaxTex,
+        "48_WebGL_MaxViewportDims": glMaxView,
+        "49_WebGL_MaxAnisotropy": glMaxAniso,
+        "50_WebGL_ShadingLanguage": glShadingVer,
+        "51_TouchSupport": 'ontouchstart' in win ? 'Evet' : 'Hayır',
+        "52_PointerEvents": win.PointerEvent ? 'Evet' : 'Hayır',
+        "53_GamepadAPI": nav.getGamepads ? 'Evet' : 'Hayır',
+        "54_VibrationAPI": nav.vibrate ? 'Evet' : 'Hayır',
+        "55_WebRTCSupport": win.RTCPeerConnection ? 'Evet' : 'Hayır',
+        "56_BluetoothSupport": nav.bluetooth ? 'Evet' : 'Hayır',
+        "57_USBSupport": nav.usb ? 'Evet' : 'Hayır',
+        "58_PermissionsAPI": nav.permissions ? 'Evet' : 'Hayır',
+        "59_CredentialsAPI": nav.credentials ? 'Evet' : 'Hayır',
+        "60_ServiceWorkerSupport": 'serviceWorker' in nav ? 'Evet' : 'Hayır',
+        "61_WebAssemblySupport": typeof WebAssembly === 'object' ? 'Evet' : 'Hayır',
+        "62_IndexedDBSupport": win.indexedDB ? 'Evet' : 'Hayır',
+        "63_LocalStorageSupport": win.localStorage ? 'Evet' : 'Hayır',
+        "64_SessionStorageSupport": win.sessionStorage ? 'Evet' : 'Hayır',
+        "65_DeviceOrientationSupport": win.DeviceOrientationEvent ? 'Evet' : 'Hayır',
+        "66_DeviceMotionSupport": win.DeviceMotionEvent ? 'Evet' : 'Hayır',
+        "67_PrefersReducedMotion": win.matchMedia && win.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'Evet' : 'Hayır',
+        "68_PrefersContrast": win.matchMedia && win.matchMedia('(prefers-contrast: more)').matches ? 'Evet' : 'Hayır',
+        "69_ForcedColors": win.matchMedia && win.matchMedia('(forced-colors: active)').matches ? 'Evet' : 'Hayır',
+        "70_InvertedColors": win.matchMedia && win.matchMedia('(inverted-colors: inverted)').matches ? 'Evet' : 'Hayır',
+        "71_IntlCollator": Intl.Collator().resolvedOptions().locale,
+        "72_IntlCalendar": Intl.DateTimeFormat().resolvedOptions().calendar,
+        "73_IntlNumbering": Intl.NumberFormat().resolvedOptions().numberingSystem,
+        "74_ScreenLeft": win.screenLeft || win.screenX || 0,
+        "75_ScreenTop": win.screenTop || win.screenY || 0,
+        "76_HistoryLength": win.history.length,
+        "77_SpeechSynthesisVoices": win.speechSynthesis ? win.speechSynthesis.getVoices().length : 0,
+        "78_NetworkSaveData": (nav.connection && nav.connection.saveData) ? 'Evet' : 'Hayır',
+        "79_EvalLength": eval.toString().length,
+        "80_MathConstants": (Math.PI + Math.sin(1.1)).toString().substring(0,12),
+        "81_AppCodeName": nav.appCodeName || 'Bilinmiyor',
+        "82_Product": nav.product || 'Bilinmiyor',
+        "83_ProductSub": nav.productSub || 'Bilinmiyor',
+        "84_BrowserEngine": (nav.userAgent.indexOf('Gecko') > -1 && nav.userAgent.indexOf('KHTML') === -1) ? 'Gecko' : 'Other'
     };
 }
 
@@ -521,7 +624,6 @@ window.togglePublish = async function(isChecked) {
     catch(e) { alert("Hata: " + e.message); }
 };
 
-// YENİ: Katılımcı Silme
 window.adminDeleteUser = async function(uid) {
     if(confirm("Bu katılımcıyı tamamen silmek istediğinize emin misiniz?")) {
         try { await remove(ref(db, `users/${uid}`)); }
@@ -529,7 +631,6 @@ window.adminDeleteUser = async function(uid) {
     }
 };
 
-// YENİ: Katılımcı Banlama (IP tabanlı)
 window.adminBanUser = async function(uid) {
     const user = window.globalUsersMap[uid];
     if(!user || !user.fingerprint) return alert("Kullanıcı verisi okunamadı.");
@@ -541,7 +642,6 @@ window.adminBanUser = async function(uid) {
                 const safeIpKey = userIP.replace(/\./g, '_').replace(/:/g, '_');
                 await set(ref(db, `banned/${safeIpKey}`), true);
             }
-            // Banladıktan sonra listeden de sil
             await remove(ref(db, `users/${uid}`));
             alert("Kullanıcı başarıyla banlandı ve silindi.");
         } catch(e) {
@@ -550,7 +650,6 @@ window.adminBanUser = async function(uid) {
     }
 };
 
-// Modal İşlemleri
 window.openFpModal = function(uid) {
     const u = window.globalUsersMap[uid];
     if(!u || !u.fingerprint) return;
