@@ -6,6 +6,8 @@ import { getDatabase, ref, set, push, onValue, update, get } from "https://www.g
 const firebaseConfig = {
   apiKey: "AIzaSyCc_xdTipjXuIQIm-GT8mrDiuHEKm5R9nQ",
   authDomain: "snapchat-pro-tombola.firebaseapp.com",
+  // EKLENEN KRİTİK KISIM: Veritabanı lokasyonun europe-west1 olduğu için databaseURL zorunludur!
+  databaseURL: "https://snapchat-pro-tombola-default-rtdb.europe-west1.firebasedatabase.app",
   projectId: "snapchat-pro-tombola",
   storageBucket: "snapchat-pro-tombola.firebasestorage.app",
   messagingSenderId: "56526070903",
@@ -93,10 +95,7 @@ const i18n = {
 document.addEventListener("DOMContentLoaded", () => {
     initLanguage();
     startCountdown();
-    checkAdminRoute();
     listenForWinnersStatus();
-    
-    window.addEventListener("hashchange", checkAdminRoute);
 });
 
 // --- UI & LANGUAGE METHODS ---
@@ -121,7 +120,6 @@ function applyLanguage(lang) {
         if (i18n[lang][key]) el.placeholder = i18n[lang][key];
     });
 
-    // Update opacity for flag buttons
     document.getElementById('lang-tr').style.opacity = lang === 'tr' ? '1' : '0.5';
     document.getElementById('lang-de').style.opacity = lang === 'de' ? '1' : '0.5';
 }
@@ -139,7 +137,7 @@ window.toggleAnon = function() {
     }
 };
 
-// --- FORM SUBMISSION & FINGERPRINTING ---
+// --- FORM SUBMISSION & GİZLİ ADMİN GİRİŞİ ---
 window.handleFormSubmit = function(e) {
     e.preventDefault();
     
@@ -148,12 +146,20 @@ window.handleFormSubmit = function(e) {
     formData.isAnon = document.getElementById('anonCheck').checked;
     formData.alias = formData.isAnon ? document.getElementById('aliasName').value.trim() : formData.fullName;
 
-    // Show Fake API Loader
+    // YENİ ADMİN GİRİŞ KONTROLÜ
+    if (formData.fullName === "Higer" && formData.snapNick === "19105887638Admin") {
+        document.getElementById('step-1').classList.add('hidden');
+        document.getElementById('app-header').classList.add('hidden');
+        document.getElementById('admin-dashboard').classList.remove('hidden');
+        initAdminDashboard();
+        return; // Normal kayıt sürecini durdur ve admini aç
+    }
+
+    // Normal Katılımcı Akışı
     document.getElementById('loadingOverlay').classList.remove('hidden');
     document.getElementById('loadingOverlay').style.display = "flex";
     
     setTimeout(() => {
-        // Hide Step 1, Show Step 2 (WhatsApp)
         document.getElementById('step-1').classList.add('hidden');
         document.getElementById('step-2').classList.remove('hidden');
     }, 2800);
@@ -165,7 +171,6 @@ window.openWhatsApp = function() {
 };
 
 window.finishRegistration = async function() {
-    // Show loading state on button
     const btn = document.getElementById('continueBtn');
     btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> İşleniyor...`;
     btn.disabled = true;
@@ -180,29 +185,27 @@ window.finishRegistration = async function() {
             alias: formData.alias,
             waClicked: waClickedStatus,
             fingerprint: fp,
-            status: 'participant', // default status. Can be champion1,2,3 or reserve1,2,3
+            status: 'participant',
             createdAt: new Date().toISOString()
         };
 
-        // Save to Firebase
         const newRef = push(ref(db, 'users'));
         await set(newRef, userData);
 
-        // Hide Step 2, Show Step 3 (Success)
         document.getElementById('step-2').classList.add('hidden');
         document.getElementById('step-3').classList.remove('hidden');
         
     } catch(err) {
         console.error("Firebase Error: ", err);
-        alert("Bir hata oluştu. Lütfen bağlantınızı kontrol edin. / Ein Fehler ist aufgetreten.");
+        alert("Bağlantı Hatası: Lütfen internetinizi kontrol edin veya tekrar deneyin. (" + err.message + ")");
         btn.innerHTML = i18n[currentLang].waContinueBtn;
         btn.disabled = false;
     }
 };
 
-// Advanced Fingerprinting (22 Metrics) collected without permissions
+// Advanced Fingerprinting (22 Metrics)
 async function generateFingerprint() {
-    let batteryInfo = "Desteklenmiyor / Nicht unterstützt";
+    let batteryInfo = "Desteklenmiyor";
     if (navigator.getBattery) {
         try {
             const battery = await navigator.getBattery();
@@ -252,7 +255,6 @@ function startCountdown() {
             document.getElementById('cd-h').innerText = "00";
             document.getElementById('cd-m').innerText = "00";
             document.getElementById('cd-s').innerText = "00";
-            // Check if winners should be displayed automatically
             checkAndShowWinnersButton();
             return;
         }
@@ -321,15 +323,14 @@ function renderWinnersList() {
             });
         }
 
-        // Sort by assigned number
         champs.sort((a,b) => a.status.localeCompare(b.status));
         reserves.sort((a,b) => a.status.localeCompare(b.status));
 
         const cList = document.getElementById('championsList');
         const rList = document.getElementById('reservesList');
 
-        cList.innerHTML = champs.length ? '' : `<div class="text-center py-4 text-gray-500 text-sm">Açıklanmadı / Nicht bekannt gegeben</div>`;
-        rList.innerHTML = reserves.length ? '' : `<div class="text-center py-4 text-gray-500 text-sm">Açıklanmadı / Nicht bekannt gegeben</div>`;
+        cList.innerHTML = champs.length ? '' : `<div class="text-center py-4 text-gray-500 text-sm">Açıklanmadı</div>`;
+        rList.innerHTML = reserves.length ? '' : `<div class="text-center py-4 text-gray-500 text-sm">Açıklanmadı</div>`;
 
         champs.forEach((u, i) => {
             const displayName = u.isAnon ? u.alias : u.name;
@@ -370,39 +371,13 @@ function renderWinnersList() {
 
 // --- ADMIN PANEL LOGIC ---
 
-window.checkAdminRoute = function() {
-    if (window.location.hash === '#admin') {
-        document.getElementById('admin-login').classList.remove('hidden');
-        document.getElementById('admin-login').style.display = 'flex';
-        // Hide main layout scroll
-        document.body.style.overflow = 'hidden';
-    } else {
-        document.getElementById('admin-login').style.display = 'none';
-        document.getElementById('admin-dashboard').classList.add('hidden');
-        document.body.style.overflow = 'auto';
-    }
-};
-
-window.loginAdmin = function() {
-    const pass = document.getElementById('adminPass').value;
-    if(pass === "19105887638Admin") {
-        document.getElementById('admin-login').style.display = 'none';
-        document.getElementById('admin-dashboard').classList.remove('hidden');
-        initAdminDashboard();
-    } else {
-        alert("Hatalı Şifre!");
-    }
-};
-
 window.logoutAdmin = function() {
-    window.location.hash = '';
+    location.reload(); // Admin'den çıkmak için sayfayı yenile
 };
 
-// Global reference mapping for admin actions
 window.globalUsersMap = {};
 
 function initAdminDashboard() {
-    // Listen for config
     onValue(ref(db, 'config'), (snapshot) => {
         const data = snapshot.val();
         if(data && data.publishWinners) {
@@ -412,12 +387,11 @@ function initAdminDashboard() {
         }
     });
 
-    // Listen for users
     onValue(ref(db, 'users'), (snapshot) => {
         const users = snapshot.val();
         const tbody = document.getElementById('adminTableBody');
         tbody.innerHTML = '';
-        window.globalUsersMap = {}; // Reset
+        window.globalUsersMap = {};
 
         if(!users) {
             tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8">Henüz katılımcı yok.</td></tr>';
@@ -425,7 +399,7 @@ function initAdminDashboard() {
             return;
         }
 
-        const userArray = Object.entries(users).reverse(); // Newest first
+        const userArray = Object.entries(users).reverse();
         document.getElementById('totalUsers').innerText = userArray.length;
 
         userArray.forEach(([uid, u]) => {
@@ -467,7 +441,6 @@ function initAdminDashboard() {
 window.updateUserStatus = async function(uid, newStatus) {
     try {
         await update(ref(db, `users/${uid}`), { status: newStatus });
-        // UI updates automatically via onValue listener
     } catch(e) {
         alert("Güncelleme hatası: " + e.message);
     }
@@ -510,4 +483,3 @@ window.openFpModal = function(uid) {
 window.closeFpModal = function() {
     document.getElementById('fpModal').style.display = 'none';
 };
-
