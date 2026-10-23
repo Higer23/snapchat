@@ -2,7 +2,7 @@ name: Euro TRY Rate Tracker
 
 on:
   schedule:
-    # GitHub Actions schedules are best-effort and may be delayed.
+    # GitHub cron runs can be delayed; this is the requested 10-minute cadence.
     - cron: "*/10 * * * *"
   workflow_dispatch:
 
@@ -16,7 +16,7 @@ concurrency:
 jobs:
   update-rate:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
@@ -24,52 +24,86 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Fetch rate and write euro.txt with trend
+      - name: Fetch EUR/TRY rate and prepend history
         shell: bash
         run: |
           set -euo pipefail
-          response="$(curl --fail --silent --show-error --location --retry 3 --retry-delay 2 'https://api.frankfurter.dev/v1/latest?base=EUR&symbols=TRY')"
+          response="$(curl --fail --silent --show-error --location --retry 5 --retry-all-errors --retry-delay 3 'https://api.frankfurter.dev/v1/latest?base=EUR&symbols=TRY')"
           new_rate="$(printf '%s' "$response" | python3 -c 'import json,sys; d=json.load(sys.stdin); r=d["rates"]["TRY"]; assert isinstance(r,(int,float)) and r>0; print(f"{r:.4f}")')"
           rate_date="$(printf '%s' "$response" | python3 -c 'import json,sys; print(json.load(sys.stdin)["date"])')"
-          previous_rate="$(python3 - <<'PY'
-          import re
-          try:
-              text = open("euro.txt", encoding="utf-8").read()
-              match = re.search(r"1 EUR = ([0-9]+(?:\.[0-9]+)?) TRY", text)
-              print(match.group(1) if match else "")
-          except FileNotFoundError:
-              print("")
-          PY
-          )"
-          trend="🟡 ➖ UNCHANGED"
-          if [ -n "$previous_rate" ]; then
-            trend="$(python3 - "$previous_rate" "$new_rate" <<'PY'
-          import sys
-          old, new = map(float, sys.argv[1:])
-          if new > old:
-              print("🟢 ⬆️ INCREASED")
-          elif new < old:
-              print("🔴 ⬇️ DECREASED")
-          else:
-              print("🟡 ➖ UNCHANGED")
-          PY
-          )"
-          else
-            trend="🟡 ➖ FIRST READING"
-          fi
-          updated_at="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-          cat > euro.txt <<EOF
-          EUR/TRY reference rate
-          💶 1 EUR = ${new_rate} TRY
-          Trend: ${trend}
-          Rate date: ${rate_date}
-          Last checked: ${updated_at}
-          Source: Frankfurter API (reference rates)
-          Previous recorded rate: ${previous_rate:-not available}
-          EOF
-          cat euro.txt
+          checked_at="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          checked_iso="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
-      - name: Commit every successful check
+          # Extract the previous current rate only from the Current section.
+          previous_rate=""
+          if [[ -f euro.txt ]]; then
+            previous_rate="$(awk '/^History \(newest first\):/{exit} /^1 EUR = /{print $4; exit}' euro.txt || true)"
+          fi
+
+          trend='🟡 ➖ UNCHANGED'
+          if [[ -z "$previous_rate" ]]; then
+            trend='🟡 🆕 FIRST READING'
+          elif python3 - "$previous_rate" "$new_rate" <<'PY'
+          import sys
+          raise SystemExit(0 if float(sys.argv[2]) > float(sys.argv[1]) else 1)
+          PY
+          then
+            trend='🟢 ⬆️ INCREASED'
+          elif python3 - "$previous_rate" "$new_rate" <<'PY'
+          import sys
+          raise SystemExit(0 if float(sys.argv[2]) < float(sys.argv[1]) else 1)
+          PY
+          then
+            trend='🔴 ⬇️ DECREASED'
+          fi
+
+          history_file="$(mktemp)"
+          if [[ -f euro.txt ]] && grep -q '^History (newest first):$' euro.txt; then
+            awk 'found{print} /^History \(newest first\):$/{found=1; print}' euro.txt > "$history_file"
+            # Keep the newest 1000 history records; each record is a 5-line block.
+            python3 - "$history_file" <<'PY'
+          import sys
+          p=sys.argv[1]
+          lines=open(p,encoding='utf-8').read().splitlines()
+          if lines and lines[0] == 'History (newest first):':
+              body=lines[1:]
+              # Records are separated by blank lines; preserve at most 1000 blocks.
+              blocks=[]
+              current=[]
+              for line in body:
+                  if not line.strip():
+                      if current:
+                          blocks.append(current); current=[]
+                  else:
+                      current.append(line)
+              if current: blocks.append(current)
+              with open(p,'w',encoding='utf-8') as f:
+                  f.write('History (newest first):\n')
+                  for block in blocks[:1000]:
+                      f.write('\n'.join(block)+'\n\n')
+          PY
+          else
+            printf 'History (newest first):\n' > "$history_file"
+          fi
+
+          # Add the just-fetched record at the top of history.
+          history_body="$(tail -n +2 "$history_file" 2>/dev/null || true)"
+          {
+            printf 'EUR/TRY reference rate\n'
+            printf '1 EUR = %s TRY\n' "$new_rate"
+            printf 'Trend: %s\n' "$trend"
+            printf 'Rate date: %s\n' "$rate_date"
+            printf 'Last checked: %s\n' "$checked_at"
+            printf 'Source: Frankfurter API (reference rates)\n'
+            printf 'Previous recorded rate: %s\n' "${previous_rate:-not available}"
+            printf '\nHistory (newest first):\n'
+            printf '[%s] 1 EUR = %s TRY | %s | rate date %s\n\n' "$checked_iso" "$new_rate" "$trend" "$rate_date"
+            printf '%s' "$history_body"
+          } > euro.txt
+          rm -f "$history_file"
+          echo "Updated euro.txt: 1 EUR = $new_rate TRY ($trend)"
+
+      - name: Commit and push with retry for concurrent workflow commits
         shell: bash
         run: |
           set -euo pipefail
@@ -77,4 +111,15 @@ jobs:
           git config user.email "208321685+Higer23@users.noreply.github.com"
           git add euro.txt
           git commit -m "chore(euro): record EUR/TRY rate check"
-          git push origin HEAD:main
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+            git rebase origin/main || { git rebase --abort || true; }
+            if git push origin HEAD:main; then
+              echo "Push succeeded on attempt $attempt"
+              exit 0
+            fi
+            echo "Push attempt $attempt failed; retrying..."
+            sleep $((attempt * 2))
+          done
+          echo "::error::Could not push euro.txt after 5 attempts."
+          exit 1
