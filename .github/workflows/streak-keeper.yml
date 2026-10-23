@@ -1,0 +1,56 @@
+name: Simple Daily Streak Keeper
+
+on:
+  schedule:
+    # UTC 04:00 = Türkiye saati 07:00
+    - cron: '0 4 * * *'
+  workflow_dispatch: # Actions panelinden manuel çalıştırmak için
+
+jobs:
+  streak-commit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Git Configuration
+        run: |
+          git config user.name "Higer23"
+          git config user.email "208321685+Higer23@users.noreply.github.com"
+
+      - name: 1. Adım - Rastgele metin ekle ve commit at
+        run: |
+          RANDOM_STRING=$(head -c 200 /dev/urandom | tr -dc a-z0-9 | head -c 12)
+          TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S")
+          echo "<!-- streak-update: $RANDOM_STRING-$TIMESTAMP -->" >> README.md
+          git add README.md
+          git commit -m "chore(streak): daily update [skip ci]"
+          git push origin HEAD:main
+
+      - name: 2. Adım - Eklenen satırı sil ve commit at
+        run: |
+          sed -i '$d' README.md
+          git add README.md
+          git commit -m "chore(streak): revert temp change [skip ci]"
+          git push origin HEAD:main
+
+      - name: Discord - Başarılı
+        if: success() && env.DISCORD_WEBHOOK != ''
+        run: |
+          curl -s -H "Content-Type: application/json" \
+            -d '{"content":"✅ Streak Keeper başarılı: ${{ github.repository }}"}' \
+            "$DISCORD_WEBHOOK"
+
+      - name: Discord - Başarısız
+        if: failure() && env.DISCORD_WEBHOOK != ''
+        run: |
+          curl -s -H "Content-Type: application/json" \
+            -d '{"content":"❌ Streak Keeper BAŞARISIZ: ${{ github.repository }} - ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
+            "$DISCORD_WEBHOOK"
