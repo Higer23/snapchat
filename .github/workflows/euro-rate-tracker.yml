@@ -2,7 +2,7 @@ name: Euro TRY Rate Tracker
 
 on:
   schedule:
-    # GitHub Actions schedules can be delayed; this is a best-effort 10-minute cadence.
+    # GitHub Actions schedules are best-effort and may be delayed.
     - cron: "*/10 * * * *"
   workflow_dispatch:
 
@@ -24,39 +24,57 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Fetch current EUR to TRY reference rate
+      - name: Fetch rate and write euro.txt with trend
         shell: bash
         run: |
           set -euo pipefail
           response="$(curl --fail --silent --show-error --location --retry 3 --retry-delay 2 'https://api.frankfurter.dev/v1/latest?base=EUR&symbols=TRY')"
-          rate_file="$(mktemp)"
-          printf '%s' "$response" | python3 -c '
-          import json, sys
-          data = json.load(sys.stdin)
-          rate = data["rates"]["TRY"]
-          rate_date = data["date"]
-          if not isinstance(rate, (int, float)) or rate <= 0:
-              raise SystemExit("Invalid EUR/TRY rate received")
-          print("EUR/TRY reference rate")
-          print(f"1 EUR = {rate:.4f} TRY")
-          print(f"Rate date: {rate_date}")
-          print("Source: Frankfurter API (reference rates)")
-          ' > "$rate_file"
-          mv "$rate_file" euro.txt
-          echo "Retrieved EUR/TRY reference rate:"
+          new_rate="$(printf '%s' "$response" | python3 -c 'import json,sys; d=json.load(sys.stdin); r=d["rates"]["TRY"]; assert isinstance(r,(int,float)) and r>0; print(f"{r:.4f}")')"
+          rate_date="$(printf '%s' "$response" | python3 -c 'import json,sys; print(json.load(sys.stdin)["date"])')"
+          previous_rate="$(python3 - <<'PY'
+          import re
+          try:
+              text = open("euro.txt", encoding="utf-8").read()
+              match = re.search(r"1 EUR = ([0-9]+(?:\.[0-9]+)?) TRY", text)
+              print(match.group(1) if match else "")
+          except FileNotFoundError:
+              print("")
+          PY
+          )"
+          trend="🟡 ➖ UNCHANGED"
+          if [ -n "$previous_rate" ]; then
+            trend="$(python3 - "$previous_rate" "$new_rate" <<'PY'
+          import sys
+          old, new = map(float, sys.argv[1:])
+          if new > old:
+              print("🟢 ⬆️ INCREASED")
+          elif new < old:
+              print("🔴 ⬇️ DECREASED")
+          else:
+              print("🟡 ➖ UNCHANGED")
+          PY
+          )"
+          else
+            trend="🟡 ➖ FIRST READING"
+          fi
+          updated_at="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          cat > euro.txt <<EOF
+          EUR/TRY reference rate
+          💶 1 EUR = ${new_rate} TRY
+          Trend: ${trend}
+          Rate date: ${rate_date}
+          Last checked: ${updated_at}
+          Source: Frankfurter API (reference rates)
+          Previous recorded rate: ${previous_rate:-not available}
+          EOF
           cat euro.txt
 
-      - name: Commit only when the rate record changes
+      - name: Commit every successful check
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet -- euro.txt; then
-            echo "euro.txt is unchanged; no commit created."
-            exit 0
-          fi
-
           git config user.name "Higer23"
           git config user.email "208321685+Higer23@users.noreply.github.com"
           git add euro.txt
-          git commit -m "chore(euro): update EUR/TRY reference rate"
+          git commit -m "chore(euro): record EUR/TRY rate check"
           git push origin HEAD:main
