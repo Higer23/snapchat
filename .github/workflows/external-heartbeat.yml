@@ -1,0 +1,65 @@
+name: External Heartbeat Commit
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: external-heartbeat-main
+  cancel-in-progress: false
+
+jobs:
+  heartbeat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Configure Git identity
+        run: |
+          git config user.name "Higer23"
+          git config user.email "208321685+Higer23@users.noreply.github.com"
+
+      - name: Update heartbeat record
+        run: |
+          mkdir -p .github/heartbeat
+          python3 - <<'PY'
+          from datetime import datetime, timezone
+          from pathlib import Path
+          now = datetime.now(timezone.utc).replace(microsecond=0)
+          path = Path(".github/heartbeat/last-run.txt")
+          path.write_text(
+              "External heartbeat workflow\n"
+              f"Last successful run (UTC): {now.isoformat()}\n"
+              "Purpose: verify scheduled workflow dispatch and preserve an auditable run record.\n",
+              encoding="utf-8",
+          )
+          PY
+          git add .github/heartbeat/last-run.txt
+          if git diff --cached --quiet; then
+            echo "No file changes to commit."
+            exit 0
+          fi
+          git commit -m "chore(heartbeat): record scheduled run"
+      
+      - name: Push with retry
+        shell: bash
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then
+              echo "Heartbeat commit pushed successfully."
+              exit 0
+            fi
+            echo "Push attempt $attempt failed; syncing with main."
+            git fetch origin main
+            git rebase origin/main
+            sleep $((attempt * 3))
+          done
+          echo "::error::Could not push heartbeat commit after five attempts."
+          exit 1
