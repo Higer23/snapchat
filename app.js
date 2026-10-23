@@ -1,4 +1,4 @@
-// --- IMPORTS ---
+// --- IMPORTS --- Dünyayı yok et şaka şaka
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
 import { getDatabase, ref, set, push, onValue, update, get, remove } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
 
