@@ -2,7 +2,6 @@ name: Euro TRY Rate Tracker
 
 on:
   schedule:
-    # GitHub cron runs can be delayed; this is the requested 10-minute cadence.
     - cron: "*/10 * * * *"
   workflow_dispatch:
 
@@ -24,84 +23,76 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Fetch EUR/TRY rate and prepend history
+      - name: Fetch rate, preserve history newest-first
         shell: bash
         run: |
           set -euo pipefail
           response="$(curl --fail --silent --show-error --location --retry 5 --retry-all-errors --retry-delay 3 'https://api.frankfurter.dev/v1/latest?base=EUR&symbols=TRY')"
-          new_rate="$(printf '%s' "$response" | python3 -c 'import json,sys; d=json.load(sys.stdin); r=d["rates"]["TRY"]; assert isinstance(r,(int,float)) and r>0; print(f"{r:.4f}")')"
-          rate_date="$(printf '%s' "$response" | python3 -c 'import json,sys; print(json.load(sys.stdin)["date"])')"
-          checked_at="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-          checked_iso="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          export RESPONSE_JSON="$response"
+          export CHECKED_AT="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          export CHECKED_ISO="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          python3 - <<'PY'
+          import os, json, re, datetime
+          from pathlib import Path
 
-          # Extract the previous current rate only from the Current section.
-          previous_rate=""
-          if [[ -f euro.txt ]]; then
-            previous_rate="$(awk '/^History \(newest first\):/{exit} /^1 EUR = /{print $4; exit}' euro.txt || true)"
-          fi
+          response = json.loads(os.environ["RESPONSE_JSON"])
+          rate = float(response["rates"]["TRY"])
+          if rate <= 0:
+              raise SystemExit("API returned an invalid EUR/TRY rate")
+          rate_s = f"{rate:.4f}"
+          rate_date = response["date"]
+          checked = os.environ["CHECKED_AT"]
+          checked_iso = os.environ["CHECKED_ISO"]
+          path = Path("euro.txt")
+          old = path.read_text(encoding="utf-8") if path.exists() else ""
 
-          trend='🟡 ➖ UNCHANGED'
-          if [[ -z "$previous_rate" ]]; then
-            trend='🟡 🆕 FIRST READING'
-          elif python3 - "$previous_rate" "$new_rate" <<'PY'
-          import sys
-          raise SystemExit(0 if float(sys.argv[2]) > float(sys.argv[1]) else 1)
+          # Current snapshot is before the history heading, so this finds the prior rate.
+          current_section = old.split("History (newest first):", 1)[0]
+          match = re.search(r"^1 EUR = ([0-9]+(?:\.[0-9]+)?) TRY\s*$", current_section, re.M)
+          previous_rate = float(match.group(1)) if match else None
+
+          if previous_rate is None:
+              trend = "🟡 🆕 FIRST READING"
+          elif rate > previous_rate:
+              trend = "🟢 ⬆️ INCREASED"
+          elif rate < previous_rate:
+              trend = "🔴 ⬇️ DECREASED"
+          else:
+              trend = "🟡 ➖ UNCHANGED"
+
+          history = []
+          if "History (newest first):" in old:
+              old_history = old.split("History (newest first):", 1)[1]
+              history = [line.strip() for line in old_history.splitlines() if line.strip().startswith("[")]
+          elif old:
+              # Migrate the older single-snapshot format into the permanent history.
+              old_rate = re.search(r"^1 EUR = ([0-9]+(?:\.[0-9]+)?) TRY\s*$", current_section, re.M)
+              old_date = re.search(r"^Rate date:\s*(.+)$", current_section, re.M)
+              old_checked = re.search(r"^Last checked:\s*(.+)$", current_section, re.M)
+              old_trend = re.search(r"^Trend:\s*(.+)$", current_section, re.M)
+              if old_rate:
+                  stamp = old_checked.group(1) if old_checked else "legacy record"
+                  history.append(f"[{stamp}] 1 EUR = {float(old_rate.group(1)):.4f} TRY | {old_trend.group(1) if old_trend else 'LEGACY RECORD'} | rate date {old_date.group(1) if old_date else 'unknown'}")
+
+          entry = f"[{checked_iso}] 1 EUR = {rate_s} TRY | {trend} | rate date {rate_date}"
+          # Add newest at the top, avoid duplicate entries caused by reruns within a second.
+          history = [entry] + [item for item in history if item != entry]
+          history = history[:1000]
+
+          text = (
+              "EUR/TRY reference rate\n"
+              f"1 EUR = {rate_s} TRY\n"
+              f"Trend: {trend}\n"
+              f"Rate date: {rate_date}\n"
+              f"Last checked: {checked}\n"
+              "Source: Frankfurter API (reference rates)\n"
+              f"Previous recorded rate: {f'{previous_rate:.4f} TRY' if previous_rate is not None else 'not available'}\n\n"
+              "History (newest first):\n"
+              + "\n".join(history) + "\n"
+          )
+          path.write_text(text, encoding="utf-8")
+          print(f"Current EUR/TRY: {rate_s}; previous={previous_rate}; trend={trend}; history entries={len(history)}")
           PY
-          then
-            trend='🟢 ⬆️ INCREASED'
-          elif python3 - "$previous_rate" "$new_rate" <<'PY'
-          import sys
-          raise SystemExit(0 if float(sys.argv[2]) < float(sys.argv[1]) else 1)
-          PY
-          then
-            trend='🔴 ⬇️ DECREASED'
-          fi
-
-          history_file="$(mktemp)"
-          if [[ -f euro.txt ]] && grep -q '^History (newest first):$' euro.txt; then
-            awk 'found{print} /^History \(newest first\):$/{found=1; print}' euro.txt > "$history_file"
-            # Keep the newest 1000 history records; each record is a 5-line block.
-            python3 - "$history_file" <<'PY'
-          import sys
-          p=sys.argv[1]
-          lines=open(p,encoding='utf-8').read().splitlines()
-          if lines and lines[0] == 'History (newest first):':
-              body=lines[1:]
-              # Records are separated by blank lines; preserve at most 1000 blocks.
-              blocks=[]
-              current=[]
-              for line in body:
-                  if not line.strip():
-                      if current:
-                          blocks.append(current); current=[]
-                  else:
-                      current.append(line)
-              if current: blocks.append(current)
-              with open(p,'w',encoding='utf-8') as f:
-                  f.write('History (newest first):\n')
-                  for block in blocks[:1000]:
-                      f.write('\n'.join(block)+'\n\n')
-          PY
-          else
-            printf 'History (newest first):\n' > "$history_file"
-          fi
-
-          # Add the just-fetched record at the top of history.
-          history_body="$(tail -n +2 "$history_file" 2>/dev/null || true)"
-          {
-            printf 'EUR/TRY reference rate\n'
-            printf '1 EUR = %s TRY\n' "$new_rate"
-            printf 'Trend: %s\n' "$trend"
-            printf 'Rate date: %s\n' "$rate_date"
-            printf 'Last checked: %s\n' "$checked_at"
-            printf 'Source: Frankfurter API (reference rates)\n'
-            printf 'Previous recorded rate: %s\n' "${previous_rate:-not available}"
-            printf '\nHistory (newest first):\n'
-            printf '[%s] 1 EUR = %s TRY | %s | rate date %s\n\n' "$checked_iso" "$new_rate" "$trend" "$rate_date"
-            printf '%s' "$history_body"
-          } > euro.txt
-          rm -f "$history_file"
-          echo "Updated euro.txt: 1 EUR = $new_rate TRY ($trend)"
 
       - name: Commit and push with retry for concurrent workflow commits
         shell: bash
@@ -113,10 +104,13 @@ jobs:
           git commit -m "chore(euro): record EUR/TRY rate check"
           for attempt in 1 2 3 4 5; do
             git fetch origin main
-            git rebase origin/main || { git rebase --abort || true; }
-            if git push origin HEAD:main; then
-              echo "Push succeeded on attempt $attempt"
-              exit 0
+            if git rebase origin/main; then
+              if git push origin HEAD:main; then
+                echo "Push succeeded on attempt $attempt"
+                exit 0
+              fi
+            else
+              git rebase --abort || true
             fi
             echo "Push attempt $attempt failed; retrying..."
             sleep $((attempt * 2))
