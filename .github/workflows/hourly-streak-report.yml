@@ -19,7 +19,6 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Fetch profile contribution graph and streak status
-        id: stats
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_OWNER: Higer23
@@ -37,41 +36,37 @@ jobs:
           today = datetime.datetime.now(datetime.timezone.utc).date()
           year_start = today.replace(month=1, day=1)
 
-          # GitHub's public contribution graph is used so we don't need a personal access token.
+          # Public profile contribution graph. Correct regex boundaries are important here.
           url = f"https://github.com/users/{owner}/contributions?from={year_start.isoformat()}&to={today.isoformat()}"
           req = urllib.request.Request(url, headers={"User-Agent": "Higer23-Streak-Reporter/1.0"})
           with urllib.request.urlopen(req, timeout=20) as response:
               svg = response.read().decode("utf-8", "replace")
 
           daily = {}
-          for tag in re.findall(r"<rect\\b[^>]*>", svg):
-              date_match = re.search(r'data-date="(\\d{4}-\\d{2}-\\d{2})"', tag)
-              count_match = re.search(r'data-count="(\\d+)"', tag)
+          for tag in re.findall(r"<rect\b[^>]*>", svg):
+              date_match = re.search(r'data-date="(\d{4}-\d{2}-\d{2})"', tag)
+              count_match = re.search(r'data-count="(\d+)"', tag)
               if date_match and count_match:
                   daily[date_match.group(1)] = int(count_match.group(1))
           if not daily:
-              # Alternative markup fallback: contribution data can be exposed on the SVG title elements.
-              for tag in re.findall(r"<rect\\b[^>]*>", svg):
-                  date_match = re.search(r'data-date="(\\d{4}-\\d{2}-\\d{2})"', tag)
+              # GitHub may expose the day count as aria-label instead of data-count.
+              for tag in re.findall(r"<rect\b[^>]*>", svg):
+                  date_match = re.search(r'data-date="(\d{4}-\d{2}-\d{2})"', tag)
                   label_match = re.search(r'aria-label="([^"]+)"', tag)
                   if date_match and label_match:
-                      n = re.search(r"(\\d+)", unescape(label_match.group(1)))
+                      n = re.search(r"(\d+)", unescape(label_match.group(1)))
                       daily[date_match.group(1)] = int(n.group(1)) if n else 0
           if not daily:
-              raise RuntimeError("GitHub contribution graph markup could not be parsed; refusing to send guessed statistics.")
+              raise RuntimeError("Could not parse public GitHub contribution graph. No report sent rather than inventing statistics.")
 
           annual_total = sum(daily.values())
           today_count = daily.get(today.isoformat(), 0)
           streak = 0
-          cursor = today
-          # If today has no contribution yet, count a streak ending yesterday.
-          if daily.get(cursor.isoformat(), 0) == 0:
-              cursor -= datetime.timedelta(days=1)
+          cursor = today if today_count > 0 else today - datetime.timedelta(days=1)
           while cursor.isoformat() in daily and daily.get(cursor.isoformat(), 0) > 0:
               streak += 1
               cursor -= datetime.timedelta(days=1)
 
-          # Check the most recent streak-keeper run from today (UTC) via GitHub Actions API.
           api = f"https://api.github.com/repos/{owner}/{repo}/actions/workflows/streak-keeper.yml/runs?per_page=20"
           api_req = urllib.request.Request(api, headers={
               "Authorization": f"Bearer {token}",
@@ -85,16 +80,12 @@ jobs:
           successful_today = any(r.get("conclusion") == "success" for r in today_runs)
           failed_today = any(r.get("conclusion") == "failure" for r in today_runs)
           if successful_today:
-              status = "🟢 BAŞARILI"
-              status_color = 0x2ECC71
+              status, status_color = "🟢 BAŞARILI", 0x2ECC71
           elif failed_today:
-              status = "🔴 BAŞARISIZ"
-              status_color = 0xE74C3C
+              status, status_color = "🔴 BAŞARISIZ", 0xE74C3C
           else:
-              status = "🟡 HENÜZ DOĞRULANAMADI"
-              status_color = 0xF1C40F
+              status, status_color = "🟡 HENÜZ DOĞRULANAMADI", 0xF1C40F
 
-          # Discord embed; contribution counts are profile contributions, not raw commit totals.
           payload = {
             "username": "Higer Streak Monitor",
             "allowed_mentions": {"parse": []},
@@ -116,7 +107,7 @@ jobs:
           }
           if not webhook:
               raise RuntimeError("DISCORD_WEBHOOK_URL secret is missing.")
-          body = json.dumps(payload).encode()
+          body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
           req = urllib.request.Request(webhook, data=body, headers={"Content-Type": "application/json", "User-Agent": "Higer23-Streak-Reporter/1.0"}, method="POST")
           try:
               with urllib.request.urlopen(req, timeout=20) as response:
