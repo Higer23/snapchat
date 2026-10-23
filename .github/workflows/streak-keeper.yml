@@ -99,7 +99,6 @@ jobs:
           git add .github/streak-keeper/heartbeat.json
           git commit -m "chore(streak): heartbeat ${{ steps.check.outputs.today }}"
 
-          COMMIT_SHA="$(git rev-parse HEAD)"
           PUSHED=false
           for attempt in 1 2 3; do
             echo "Push attempt $attempt/3"
@@ -119,6 +118,8 @@ jobs:
             exit 1
           fi
 
+          # A successful rebase changes the commit SHA, so capture HEAD after retries.
+          COMMIT_SHA="$(git rev-parse HEAD)"
           git fetch origin main
           if ! git merge-base --is-ancestor "$COMMIT_SHA" origin/main; then
             echo "::error::Push returned success but the heartbeat commit was not found in origin/main history."
