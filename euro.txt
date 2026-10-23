@@ -1,0 +1,3 @@
+EUR/TRY reference rate
+Will be populated by the scheduled GitHub Actions workflow.
+The workflow checks every 10 minutes and commits only when the rate record changes.

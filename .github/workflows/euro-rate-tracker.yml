@@ -1,0 +1,62 @@
+name: Euro TRY Rate Tracker
+
+on:
+  schedule:
+    # GitHub Actions schedules can be delayed; this is a best-effort 10-minute cadence.
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: euro-rate-tracker-main
+  cancel-in-progress: false
+
+jobs:
+  update-rate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Fetch current EUR to TRY reference rate
+        shell: bash
+        run: |
+          set -euo pipefail
+          response="$(curl --fail --silent --show-error --location --retry 3 --retry-delay 2 'https://api.frankfurter.dev/v1/latest?base=EUR&symbols=TRY')"
+          rate_file="$(mktemp)"
+          printf '%s' "$response" | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)
+          rate = data["rates"]["TRY"]
+          rate_date = data["date"]
+          if not isinstance(rate, (int, float)) or rate <= 0:
+              raise SystemExit("Invalid EUR/TRY rate received")
+          print("EUR/TRY reference rate")
+          print(f"1 EUR = {rate:.4f} TRY")
+          print(f"Rate date: {rate_date}")
+          print("Source: Frankfurter API (reference rates)")
+          ' > "$rate_file"
+          mv "$rate_file" euro.txt
+          echo "Retrieved EUR/TRY reference rate:"
+          cat euro.txt
+
+      - name: Commit only when the rate record changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- euro.txt; then
+            echo "euro.txt is unchanged; no commit created."
+            exit 0
+          fi
+
+          git config user.name "Higer23"
+          git config user.email "208321685+Higer23@users.noreply.github.com"
+          git add euro.txt
+          git commit -m "chore(euro): update EUR/TRY reference rate"
+          git push origin HEAD:main
