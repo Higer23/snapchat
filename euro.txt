@@ -1,3 +1,4 @@
 EUR/TRY reference rate
-Will be populated by the scheduled GitHub Actions workflow.
-The workflow checks every 10 minutes and commits only when the rate record changes.
+1 EUR = 55.6079 TRY
+Rate date: 2026-10-22
+Source: Frankfurter API (reference rates)
