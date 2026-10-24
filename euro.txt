@@ -2,11 +2,12 @@ EUR/TRY reference rate
 1 EUR = 55.6715 TRY
 Trend: 🟡 ➖ UNCHANGED
 Rate date: 2026-10-23
-Last checked: 2026-10-24 11:22:44 UTC
+Last checked: 2026-10-24 14:42:15 UTC
 Source: Frankfurter API (reference rates)
 Previous recorded rate: 55.6715 TRY
 
 History (newest first):
+[2026-10-24T14:42:15Z] 1 EUR = 55.6715 TRY | 🟡 ➖ UNCHANGED | rate date 2026-10-23
 [2026-10-24T11:22:44Z] 1 EUR = 55.6715 TRY | 🟡 ➖ UNCHANGED | rate date 2026-10-23
 [2026-10-24T06:26:04Z] 1 EUR = 55.6715 TRY | 🟡 ➖ UNCHANGED | rate date 2026-10-23
 [2026-10-24T01:37:31Z] 1 EUR = 55.6715 TRY | 🟡 ➖ UNCHANGED | rate date 2026-10-23
