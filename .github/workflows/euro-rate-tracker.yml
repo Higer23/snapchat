@@ -2,7 +2,7 @@ name: Euro TRY Rate Tracker
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: '0 */6 * * *'
   workflow_dispatch:
 
 permissions:
@@ -23,85 +23,110 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Fetch rate, preserve history newest-first
+      - name: Fetch rate and update euro.txt
         shell: bash
         run: |
           set -euo pipefail
           response="$(curl --fail --silent --show-error --location --retry 5 --retry-all-errors --retry-delay 3 'https://api.frankfurter.dev/v1/latest?base=EUR&symbols=TRY')"
           export RESPONSE_JSON="$response"
-          export CHECKED_AT="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-          export CHECKED_ISO="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
           python3 - <<'PY'
-          import os, json, re, datetime
+          import os, re, json
+          from datetime import datetime, timedelta, timezone
           from pathlib import Path
 
-          response = json.loads(os.environ["RESPONSE_JSON"])
-          rate = float(response["rates"]["TRY"])
+          MAX_LINES = 10000
+          TR_TZ = timezone(timedelta(hours=3))
+          DAYS_TR = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar']
+          HISTORY_HEADER = 'History (newest first):'
+          RATE_RE = re.compile(r'1 EUR = ([0-9]+(?:\.[0-9]+)?) TRY')
+
+          resp = json.loads(os.environ['RESPONSE_JSON'])
+          rate = float(resp['rates']['TRY'])
           if rate <= 0:
-              raise SystemExit("API returned an invalid EUR/TRY rate")
-          rate_s = f"{rate:.4f}"
-          rate_date = response["date"]
-          checked = os.environ["CHECKED_AT"]
-          checked_iso = os.environ["CHECKED_ISO"]
-          path = Path("euro.txt")
-          old = path.read_text(encoding="utf-8") if path.exists() else ""
+              raise SystemExit('API returned an invalid EUR/TRY rate')
+          rate_s = f'{rate:.4f}'
+          rate_date = resp['date']
 
-          # Current snapshot is before the history heading, so this finds the prior rate.
-          current_section = old.split("History (newest first):", 1)[0]
-          match = re.search(r"^1 EUR = ([0-9]+(?:\.[0-9]+)?) TRY\s*$", current_section, re.M)
-          previous_rate = float(match.group(1)) if match else None
+          now_utc = datetime.now(timezone.utc).replace(microsecond=0)
+          now_tr = now_utc.astimezone(TR_TZ)
+          stamp = f'{now_tr:%d.%m.%Y} {DAYS_TR[now_tr.weekday()]} {now_tr:%H:%M} TR | {now_utc:%H:%M} UTC'
 
-          if previous_rate is None:
-              trend = "🟡 🆕 FIRST READING"
-          elif rate > previous_rate:
-              trend = "🟢 ⬆️ INCREASED"
-          elif rate < previous_rate:
-              trend = "🔴 ⬇️ DECREASED"
+          path = Path('euro.txt')
+          old = path.read_text(encoding='utf-8') if path.exists() else ''
+          old_history = old.split(HISTORY_HEADER, 1)[1] if HISTORY_HEADER in old else ''
+          history = [line.rstrip() for line in old_history.splitlines() if line.strip().startswith('[')]
+
+          def rate_of(line):
+              m = RATE_RE.search(line)
+              return float(m.group(1)) if m else None
+
+          def is_change(line):
+              return any(mark in line for mark in ('🟢', '🔴', '🆕'))
+
+          def is_unchanged(line):
+              return '🟡' in line and not is_change(line)
+
+          prev = rate_of(history[0]) if history else None
+          if prev is None:
+              emoji, label = '🆕', 'İLK KAYIT'
+          elif rate > prev:
+              emoji, label = '🟢', 'ARTTI'
+          elif rate < prev:
+              emoji, label = '🔴', 'AZALDI'
           else:
-              trend = "🟡 ➖ UNCHANGED"
+              emoji, label = '🟡', 'DEĞİŞMEDİ'
 
-          history = []
-          if "History (newest first):" in old:
-              old_history = old.split("History (newest first):", 1)[1]
-              history = [line.strip() for line in old_history.splitlines() if line.strip().startswith("[")]
-          elif old:
-              # Migrate the older single-snapshot format into the permanent history.
-              old_rate = re.search(r"^1 EUR = ([0-9]+(?:\.[0-9]+)?) TRY\s*$", current_section, re.M)
-              old_date = re.search(r"^Rate date:\s*(.+)$", current_section, re.M)
-              old_checked = re.search(r"^Last checked:\s*(.+)$", current_section, re.M)
-              old_trend = re.search(r"^Trend:\s*(.+)$", current_section, re.M)
-              if old_rate:
-                  stamp = old_checked.group(1) if old_checked else "legacy record"
-                  history.append(f"[{stamp}] 1 EUR = {float(old_rate.group(1)):.4f} TRY | {old_trend.group(1) if old_trend else 'LEGACY RECORD'} | rate date {old_date.group(1) if old_date else 'unknown'}")
+          prev_part = f' | önceki {prev:.4f}' if prev is not None else ''
+          entry = f'[{stamp}] {emoji} 1 EUR = {rate_s} TRY | {label}{prev_part} | kur tarihi {rate_date}'
+          history.insert(0, entry)
 
-          entry = f"[{checked_iso}] 1 EUR = {rate_s} TRY | {trend} | rate date {rate_date}"
-          # Add newest at the top, avoid duplicate entries caused by reruns within a second.
-          history = [entry] + [item for item in history if item != entry]
-          history = history[:1000]
+          header = f'''EUR/TRY referans kuru
+          Son güncelleme: {stamp}
+          Güncel kur: 1 EUR = {rate_s} TRY
+          Trend: {emoji} {label}
+          Kur tarihi: {rate_date}
+          Kaynak: Frankfurter API (referans kurlar)
+          Kayıt sıklığı: 6 saatte bir (00:00, 06:00, 12:00, 18:00 UTC)
+          Satır limiti: {MAX_LINES}. Aşılınca en eski 🟡 (değişmeyen) kayıt silinir. Fiyat değişimi kayıtları (🟢 🔴 🆕) asla silinmez.
+          Lejant: 🟢 arttı | 🔴 azaldı | 🟡 değişmedi | 🆕 ilk kayıt
 
-          text = (
-              "EUR/TRY reference rate\n"
-              f"1 EUR = {rate_s} TRY\n"
-              f"Trend: {trend}\n"
-              f"Rate date: {rate_date}\n"
-              f"Last checked: {checked}\n"
-              "Source: Frankfurter API (reference rates)\n"
-              f"Previous recorded rate: {f'{previous_rate:.4f} TRY' if previous_rate is not None else 'not available'}\n\n"
-              "History (newest first):\n"
-              + "\n".join(history) + "\n"
-          )
-          path.write_text(text, encoding="utf-8")
-          print(f"Current EUR/TRY: {rate_s}; previous={previous_rate}; trend={trend}; history entries={len(history)}")
+          {HISTORY_HEADER}
+          '''
+
+          def build(rows):
+              return header + '\n'.join(rows) + '\n'
+
+          text = build(history)
+          deleted = 0
+          while len(text.splitlines()) > MAX_LINES:
+              idx = None
+              for i in range(len(history) - 1, -1, -1):
+                  if is_unchanged(history[i]):
+                      idx = i
+                      break
+              if idx is None:
+                  print('Limit exceeded but no unchanged rows left; price-change rows are kept.')
+                  break
+              del history[idx]
+              deleted += 1
+              text = build(history)
+
+          path.write_text(text, encoding='utf-8')
+          print(f'Recorded 1 EUR = {rate_s} TRY | {label} | total lines={len(text.splitlines())} deleted_unchanged={deleted}')
           PY
 
-      - name: Commit and push with retry for concurrent workflow commits
+      - name: Commit and push with retry
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name "Higer23"
-          git config user.email "208321685+Higer23@users.noreply.github.com"
+          git config user.name 'Higer23'
+          git config user.email '208321685+Higer23@users.noreply.github.com'
           git add euro.txt
-          git commit -m "chore(euro): record EUR/TRY rate check"
+          if git diff --cached --quiet; then
+            echo 'No changes to commit'
+            exit 0
+          fi
+          git commit -m 'chore(euro): record EUR/TRY rate check'
           for attempt in 1 2 3 4 5; do
             git fetch origin main
             if git rebase origin/main; then
@@ -115,5 +140,5 @@ jobs:
             echo "Push attempt $attempt failed; retrying..."
             sleep $((attempt * 2))
           done
-          echo "::error::Could not push euro.txt after 5 attempts."
+          echo '::error::Could not push euro.txt after 5 attempts.'
           exit 1
