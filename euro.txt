@@ -1,7 +1,7 @@
 EUR/TRY referans kuru
-Son güncelleme: 07.11.2026 Cumartesi 01:35 TR | 22:35 UTC
+Son güncelleme: 07.11.2026 Cumartesi 06:53 TR | 03:53 UTC
 Güncel kur: 1 EUR = 55.9957 TRY
-Trend: 🔴 AZALDI
+Trend: 🟡 DEĞİŞMEDİ
 Kur tarihi: 2026-11-06
 Kaynak: Frankfurter API (referans kurlar)
 Kayıt sıklığı: 6 saatte bir (00:00, 06:00, 12:00, 18:00 UTC)
@@ -9,6 +9,7 @@ Satır limiti: 10000. Aşılınca en eski 🟡 (değişmeyen) kayıt silinir. Fi
 Lejant: 🟢 arttı | 🔴 azaldı | 🟡 değişmedi | 🆕 ilk kayıt
 
 History (newest first):
+[07.11.2026 Cumartesi 06:53 TR | 03:53 UTC] 🟡 1 EUR = 55.9957 TRY | DEĞİŞMEDİ | önceki 55.9957 | kur tarihi 2026-11-06
 [07.11.2026 Cumartesi 01:35 TR | 22:35 UTC] 🔴 1 EUR = 55.9957 TRY | AZALDI | önceki 56.1729 | kur tarihi 2026-11-06
 [06.11.2026 Cuma 16:29 TR | 13:29 UTC] 🟡 1 EUR = 56.1729 TRY | DEĞİŞMEDİ | önceki 56.1729 | kur tarihi 2026-11-05
 [06.11.2026 Cuma 07:25 TR | 04:25 UTC] 🟡 1 EUR = 56.1729 TRY | DEĞİŞMEDİ | önceki 56.1729 | kur tarihi 2026-11-05
