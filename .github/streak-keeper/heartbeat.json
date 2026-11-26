@@ -1,6 +1,6 @@
 {
-  "date": "2026-11-25",
+  "date": "2026-11-26",
   "timezone": "Europe/Berlin",
-  "created_at_utc": "2026-11-25T01:31:57Z",
+  "created_at_utc": "2026-11-26T01:06:42Z",
   "purpose": "Daily GitHub Actions heartbeat; one commit per Berlin calendar day."
 }
